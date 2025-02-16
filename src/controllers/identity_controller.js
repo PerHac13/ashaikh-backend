@@ -160,4 +160,50 @@ const logoutUser = async (req, res) => {
   }
 };
 
-module.exports = { loginUser, refreshTokenUser, logoutUser };
+const checkAuth = async (req, res) => {
+  logger.info("Session check request received");
+
+  try {
+    const accessToken = req.cookies.accessToken;
+    const refreshToken = req.cookies.refreshToken;
+
+    if (!accessToken && !refreshToken) {
+      logger.warn("No tokens provided for session check");
+      return res.status(401).json({
+        success: false,
+        message: "No active session",
+        isValid: false,
+      });
+    }
+
+    try {
+      const decoded = jwt.verify(accessToken, process.env.JWT_SECRET);
+      const user = await User.findById(decoded.userId);
+
+      if (!user) {
+        throw new Error("User not found");
+      }
+
+      return res.status(200).json({
+        success: true,
+        message: "Session is valid",
+        isValid: true,
+        userId: user._id,
+      });
+    } catch (tokenError) {
+      if (!refreshToken) {
+        throw new Error("No refresh token available");
+      }
+
+      return refreshTokenUser(req, res);
+    }
+  } catch (error) {
+    logger.error("Session check failed", error);
+    return res.status(401).json({
+      success: false,
+      message: "Invalid session",
+      isValid: false,
+    });
+  }
+};
+module.exports = { loginUser, refreshTokenUser, logoutUser, checkAuth };
